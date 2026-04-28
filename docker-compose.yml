@@ -1,0 +1,60 @@
+services:
+  postgres:
+    image: postgres:15
+    container_name: postgres_db
+    environment:
+      POSTGRES_DB: bigdata
+      POSTGRES_USER: admin
+      POSTGRES_PASSWORD: admin123
+    ports:
+      - "5432:5432"
+    volumes:
+      - ./init_postgres:/docker-entrypoint-initdb.d
+      - postgres_data:/var/lib/postgresql/data
+    networks:
+      - bigdata_net
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U admin -d bigdata"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  spark:
+      build:
+        context: ./spark
+        dockerfile: Dockerfile
+      container_name: spark_app
+      environment:
+        - PYSPARK_PYTHON=python3
+        - PATH=/opt/spark/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
+      volumes:
+        - ./spark/jobs:/opt/spark/jobs
+        - ./data:/opt/spark/data
+      working_dir: /opt/spark
+      entrypoint: [ "tail", "-f", "/dev/null" ]
+      networks:
+        - bigdata_net
+      depends_on:
+        postgres:
+          condition: service_healthy
+      ports:
+        - "4040:4040"
+
+  clickhouse:
+    image: clickhouse/clickhouse-server:23.8
+    container_name: clickhouse_db
+    ports:
+      - "8123:8123"
+      - "9000:9000"
+    volumes:
+      - clickhouse_data:/var/lib/clickhouse
+    networks:
+      - bigdata_net
+
+networks:
+  bigdata_net:
+    driver: bridge
+
+volumes:
+  postgres_data:
+  clickhouse_data:
